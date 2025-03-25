@@ -183,4 +183,18 @@
   font-size: 0.8rem;
   color: #777;
   text-align: center;
+}
+
+.data-source-indicator {
+  background-color: #fff3e0;
+  color: #e65100;
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: var(--border-radius);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.data-source-indicator p {
+  margin: 0;
 } 

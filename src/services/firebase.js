@@ -14,11 +14,7 @@ import {
   where,
   query,
   orderBy,
-  enableIndexedDbPersistence,
-  CACHE_SIZE_UNLIMITED,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager
+  connectFirestoreEmulator
 } from 'firebase/firestore';
 
 // Firebase configuration from environment variables
@@ -32,16 +28,18 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
+console.log("Initializing Firebase with config:", 
+  { ...firebaseConfig, apiKey: 'HIDDEN' });
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// Initialize Firestore with better offline persistence settings
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-});
+// Initialize Firestore with memory-only caching for development
+const db = getFirestore(app);
+
+// Use in-memory mode only - no persistence 
+// We'll implement local storage backup instead
 
 // Auth services
 export const loginWithEmail = async (email, password) => {
@@ -80,40 +78,77 @@ export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback);
 };
 
-// Firestore services for conversation history
-export const saveConversation = async (userId, transcript, aiResponse, mood) => {
+// Local backup instead of Firestore
+const getLocalConversations = (userId) => {
   try {
-    if (!userId) {
-      console.warn('No user ID provided for saving conversation');
-      return false;
-    }
-    
+    const storedConversations = localStorage.getItem(`conversations_${userId}`);
+    return storedConversations ? JSON.parse(storedConversations) : [];
+  } catch (error) {
+    console.error('Error getting local conversations:', error);
+    return [];
+  }
+};
+
+const saveLocalConversation = (userId, conversation) => {
+  try {
+    const conversations = getLocalConversations(userId);
+    conversations.unshift(conversation); // Add to beginning
+    localStorage.setItem(`conversations_${userId}`, JSON.stringify(conversations));
+    return true;
+  } catch (error) {
+    console.error('Error saving local conversation:', error);
+    return false;
+  }
+};
+
+// Firestore services for conversation history with local fallback
+export const saveConversation = async (userId, transcript, aiResponse, mood) => {
+  if (!userId) {
+    console.warn('No user ID provided for saving conversation');
+    return false;
+  }
+  
+  const timestamp = new Date();
+  const conversation = {
+    userId,
+    transcript,
+    aiResponse,
+    mood,
+    timestamp,
+    id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  };
+  
+  // Save locally regardless of Firestore success
+  saveLocalConversation(userId, conversation);
+  
+  try {
     const conversationsRef = collection(db, 'conversations');
-    const timestamp = new Date();
     
+    // Try to save to Firestore but don't block on failure
     await addDoc(conversationsRef, {
       userId,
       transcript,
       aiResponse,
       mood,
       timestamp,
-      // Encrypt sensitive data in production
     });
     
     return true;
   } catch (error) {
-    console.error('Error saving conversation:', error);
-    return false;
+    console.error('Error saving conversation to Firestore:', error);
+    // We already saved locally, so this is still a partial success
+    return true;
   }
 };
 
 export const getUserConversations = async (userId) => {
+  if (!userId) {
+    console.warn('No user ID provided for getting conversations');
+    return [];
+  }
+  
   try {
-    if (!userId) {
-      console.warn('No user ID provided for getting conversations');
-      return [];
-    }
-    
+    // Try to get from Firestore first
     const conversationsRef = collection(db, 'conversations');
     const q = query(
       conversationsRef, 
@@ -131,10 +166,16 @@ export const getUserConversations = async (userId) => {
       });
     });
     
-    return conversations;
+    if (conversations.length > 0) {
+      return conversations;
+    }
+    
+    // Fall back to local storage if Firestore fails or returns empty
+    return getLocalConversations(userId);
   } catch (error) {
-    console.error('Error getting user conversations:', error);
-    return [];
+    console.error('Error getting user conversations from Firestore:', error);
+    // Fall back to local storage
+    return getLocalConversations(userId);
   }
 };
 

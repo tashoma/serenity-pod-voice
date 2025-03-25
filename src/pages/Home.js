@@ -8,7 +8,9 @@ import { transcribeAudio, generateResponse, textToSpeech } from '../services/ope
 import { saveConversation, getCurrentUser, onAuthChange, logoutUser } from '../services/firebase';
 import Login from '../components/Login';
 import ConversationHistory from '../components/ConversationHistory';
+import VoiceInstructions from '../components/VoiceInstructions';
 import '../styles/Home.css';
+import '../styles/VoiceInstructions.css';
 
 const Home = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -22,6 +24,10 @@ const Home = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [firestoreError, setFirestoreError] = useState(null);
+  const [micError, setMicError] = useState(null);
+  const [transcriptionError, setTranscriptionError] = useState(null);
+  const [micVolumeLevel, setMicVolumeLevel] = useState(0);
+  const [showVoiceInstructions, setShowVoiceInstructions] = useState(true);
   
   const audioRecorder = useRef(null);
   const audioPlayer = useRef(new Audio());
@@ -65,15 +71,48 @@ const Home = () => {
     };
   }, [audioUrl]);
   
+  // Add useEffect to check localStorage for previously dismissed instructions
+  useEffect(() => {
+    const hideInstructions = localStorage.getItem('hideVoiceInstructions');
+    if (hideInstructions === 'true') {
+      setShowVoiceInstructions(false);
+    }
+  }, []);
+  
   const handleStartRecording = async () => {
     try {
+      setMicError(null);
+      setTranscriptionError(null);
       setIsRecording(true);
       setTranscript('');
       
+      console.log('Starting audio recording...');
+      
+      if (!audioRecorder.current) {
+        console.log('Creating new AudioRecorder instance');
+        audioRecorder.current = new AudioRecorder();
+      }
+      
+      // Set volume level callback
+      audioRecorder.current.volumeCallback = (level) => {
+        setMicVolumeLevel(level);
+      };
+      
+      // Check if browser supports getUserMedia
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const error = 'Your browser does not support audio recording. Please try using Chrome, Firefox, or Edge.';
+        console.error(error);
+        setMicError(error);
+        setIsRecording(false);
+        return;
+      }
+      
       // Start recording audio
       await audioRecorder.current.startRecording();
+      console.log('Recording started successfully');
     } catch (error) {
       console.error('Error starting recording:', error);
+      setMicError(`Microphone access denied or error: ${error.message || 'Unknown error'}`);
       setIsRecording(false);
     }
   };
@@ -82,57 +121,79 @@ const Home = () => {
     if (!isRecording) return;
     
     try {
+      console.log('Stopping audio recording...');
       setIsRecording(false);
       setIsProcessing(true);
+      setMicVolumeLevel(0); // Reset volume level
       
       // Stop recording and get audio blob
       const audioBlob = await audioRecorder.current.stopRecording();
       
       if (!audioBlob) {
-        console.warn('No audio recorded');
+        console.warn('No audio recorded or audio recording failed');
+        setTranscriptionError('No audio recorded. Please try again and speak clearly.');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Log blob details for debugging
+      console.log(`Audio recorded: size=${audioBlob.size} bytes, type=${audioBlob.type}`);
+      
+      if (audioBlob.size < 1000) {
+        setTranscriptionError('Audio recording was too short or silent. Please try again and speak clearly.');
         setIsProcessing(false);
         return;
       }
       
       // Transcribe audio using OpenAI Whisper
-      let transcribedText;
       try {
-        transcribedText = await transcribeAudio(audioBlob);
+        console.log('Transcribing audio...');
+        const transcribedText = await transcribeAudio(audioBlob);
+        
+        if (!transcribedText || transcribedText.trim() === '') {
+          console.warn('Transcription returned empty text');
+          setTranscriptionError('Could not transcribe audio. Please try again and speak clearly.');
+          setIsProcessing(false);
+          return;
+        }
+        
+        console.log('Transcription successful:', transcribedText);
         setTranscript(transcribedText);
-      } catch (error) {
-        console.error('Error transcribing audio:', error);
-        setTranscript('Sorry, I couldn\'t transcribe your audio.');
-        setIsProcessing(false);
-        return;
-      }
-      
-      // Only process if there's something to process
-      if (transcribedText.trim()) {
+        
+        // Only process if there's something to process
         try {
           // Generate AI response based on transcript and mood
+          console.log(`Generating AI response for: "${transcribedText}" with mood: ${detectedMood}`);
           const response = await generateResponse(transcribedText, detectedMood);
           setAiResponse(response);
           
           // Convert AI response to speech
+          console.log('Converting AI response to speech');
           const speechUrl = await textToSpeech(response);
           setAudioUrl(speechUrl);
           
           // Save conversation if user is authenticated
           if (isAuthenticated && user) {
             try {
-              await saveConversation(user.uid, transcribedText, response, detectedMood);
+              const success = await saveConversation(user.uid, transcribedText, response, detectedMood);
+              if (!success) {
+                handleFirestoreError(new Error('Failed to save conversation'));
+              }
             } catch (error) {
-              console.error('Error saving conversation:', error);
-              setFirestoreError('Unable to save conversation. Your data is still secure.');
+              handleFirestoreError(error);
             }
           }
         } catch (error) {
           console.error('Error processing request:', error);
           setAiResponse('Sorry, I encountered an error processing your request.');
         }
+      } catch (error) {
+        console.error('Error transcribing audio:', error);
+        setTranscriptionError(`Transcription failed: ${error.message || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error stopping recording:', error);
+      console.error('Error in recording workflow:', error);
+      setTranscriptionError(`Recording error: ${error.message || 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
@@ -168,6 +229,24 @@ const Home = () => {
     } else {
       setShowLogin(true);
     }
+  };
+  
+  const handleFirestoreError = (error) => {
+    console.error('Firestore error:', error);
+    setFirestoreError(
+      'Cloud database connection issue. Your conversations are being saved locally instead.'
+    );
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setFirestoreError(null);
+    }, 5000);
+  };
+  
+  const handleDismissInstructions = () => {
+    setShowVoiceInstructions(false);
+    // Save to localStorage to remember the user's preference
+    localStorage.setItem('hideVoiceInstructions', 'true');
   };
   
   return (
@@ -210,11 +289,28 @@ const Home = () => {
             <AvatarComponent mood={detectedMood} speaking={isProcessing || (audioPlayer.current.paused === false)} />
           </div>
           
+          {showVoiceInstructions && (
+            <VoiceInstructions onClose={handleDismissInstructions} />
+          )}
+          
           <div className="transcript-container card">
             <div className="transcript-content">
               <h3>Your message:</h3>
               <p>{transcript}</p>
             </div>
+            
+            {micError && (
+              <div className="error-message">
+                <p><strong>Microphone Error:</strong> {micError}</p>
+                <p>Please make sure you have granted microphone permissions and try again.</p>
+              </div>
+            )}
+            
+            {transcriptionError && (
+              <div className="error-message">
+                <p><strong>Transcription Error:</strong> {transcriptionError}</p>
+              </div>
+            )}
             
             <div className="ai-response">
               <h3>AI response:</h3>
@@ -237,13 +333,27 @@ const Home = () => {
                 <FontAwesomeIcon icon={faMicrophone} size="2x" />
               </button>
             ) : (
-              <button 
-                className="btn btn-circle mic-button recording" 
-                onClick={handleStopRecording}
-                aria-label="Stop recording"
-              >
-                <FontAwesomeIcon icon={faStop} size="2x" />
-              </button>
+              <>
+                <button 
+                  className="btn btn-circle mic-button recording" 
+                  onClick={handleStopRecording}
+                  aria-label="Stop recording"
+                >
+                  <FontAwesomeIcon icon={faStop} size="2x" />
+                </button>
+                
+                <div className="volume-meter">
+                  <div 
+                    className="volume-meter-fill" 
+                    style={{ width: `${micVolumeLevel}%` }}
+                  ></div>
+                  {micVolumeLevel < 10 && (
+                    <div className="volume-warning">
+                      Microphone volume very low! Please speak louder or check your microphone.
+                    </div>
+                  )}
+                </div>
+              </>
             )}
             <p className="mic-status">
               {isRecording ? 'Recording...' : isProcessing ? 'Processing...' : 'Click to speak'}

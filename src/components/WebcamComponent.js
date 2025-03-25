@@ -9,6 +9,8 @@ const WebcamComponent = ({ onMoodUpdate }) => {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [noFaceTimeout, setNoFaceTimeout] = useState(null);
   
   // Load face-api models
   useEffect(() => {
@@ -113,6 +115,24 @@ const WebcamComponent = ({ onMoodUpdate }) => {
               
             // Pass the detected mood to parent component
             onMoodUpdate(maxExpression[0]);
+            
+            // Set face detected flag
+            setFaceDetected(true);
+            
+            // Clear any existing timeout
+            if (noFaceTimeout) {
+              clearTimeout(noFaceTimeout);
+              setNoFaceTimeout(null);
+            }
+          } else {
+            // No face detected
+            if (faceDetected && !noFaceTimeout) {
+              // Start a timeout to show the message after 3 seconds of no face detection
+              const timeout = setTimeout(() => {
+                setFaceDetected(false);
+              }, 3000);
+              setNoFaceTimeout(timeout);
+            }
           }
         }
       }, 300); // Detect every 300ms
@@ -145,6 +165,11 @@ const WebcamComponent = ({ onMoodUpdate }) => {
             mirrored={true}
           />
           <canvas ref={canvasRef} className="detection-canvas" />
+        </div>
+      )}
+      {!faceDetected && cameraActive && (
+        <div className="face-detection-message">
+          <p>No face clearly detected. Please adjust your position or lighting for better detection.</p>
         </div>
       )}
     </div>

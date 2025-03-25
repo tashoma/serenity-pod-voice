@@ -6,6 +6,7 @@ const ConversationHistory = ({ userId, onClose }) => {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dataSource, setDataSource] = useState('cloud');
   
   useEffect(() => {
     const fetchConversations = async () => {
@@ -17,10 +18,19 @@ const ConversationHistory = ({ userId, onClose }) => {
       try {
         setLoading(true);
         const userConversations = await getUserConversations(userId);
+        
+        // Check if we have local data
+        if (userConversations.length > 0 && userConversations[0].id.startsWith('local_')) {
+          setDataSource('local');
+        } else {
+          setDataSource('cloud');
+        }
+        
         setConversations(userConversations);
       } catch (error) {
         console.error('Error fetching conversations:', error);
         setError('Failed to load conversation history');
+        setDataSource('error');
       } finally {
         setLoading(false);
       }
@@ -32,7 +42,15 @@ const ConversationHistory = ({ userId, onClose }) => {
   const formatDate = (timestamp) => {
     if (!timestamp) return 'Unknown date';
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    // Handle both Firestore Timestamp objects and regular Date objects
+    let date;
+    if (typeof timestamp === 'string') {
+      date = new Date(timestamp);
+    } else if (timestamp.toDate) {
+      date = timestamp.toDate();
+    } else {
+      date = new Date(timestamp);
+    }
     
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
@@ -49,6 +67,12 @@ const ConversationHistory = ({ userId, onClose }) => {
         <button className="close-button" onClick={onClose}>×</button>
         
         <h2>Conversation History</h2>
+        
+        {dataSource === 'local' && (
+          <div className="data-source-indicator">
+            <p>Using locally stored conversations (offline mode)</p>
+          </div>
+        )}
         
         {loading ? (
           <div className="loading-container">

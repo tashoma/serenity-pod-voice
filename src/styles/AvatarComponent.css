@@ -1,0 +1,118 @@
+.avatar-container {
+  width: 150px;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--secondary-color);
+  border-radius: 50%;
+  box-shadow: var(--box-shadow);
+  transition: var(--transition);
+  position: relative;
+}
+
+.avatar-container:hover {
+  transform: scale(1.05);
+}
+
+.avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: var(--light-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.5s ease;
+  position: relative;
+}
+
+.avatar-face {
+  font-size: 4rem;
+  line-height: 1;
+  transition: transform 0.3s ease;
+}
+
+/* Mood-specific styling */
+.avatar.happy {
+  background-color: #E8F5E9;
+}
+
+.avatar.sad {
+  background-color: #E3F2FD;
+}
+
+.avatar.angry {
+  background-color: #FFEBEE;
+}
+
+.avatar.surprised {
+  background-color: #FFF8E1;
+}
+
+.avatar.disgusted {
+  background-color: #F3E5F5;
+}
+
+.avatar.fearful {
+  background-color: #EFEBE9;
+}
+
+.avatar.neutral {
+  background-color: #ECEFF1;
+}
+
+/* Speaking animation */
+.avatar-container.speaking .avatar {
+  animation: pulse-light 2s infinite;
+}
+
+@keyframes pulse-light {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 156, 191, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(124, 156, 191, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 156, 191, 0);
+  }
+}
+
+.speaking-indicator {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  opacity: 0.8;
+}
+
+.dot:nth-child(1) {
+  animation: jump 1s infinite;
+}
+
+.dot:nth-child(2) {
+  animation: jump 1s infinite 0.2s;
+}
+
+.dot:nth-child(3) {
+  animation: jump 1s infinite 0.4s;
+}
+
+@keyframes jump {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+} 

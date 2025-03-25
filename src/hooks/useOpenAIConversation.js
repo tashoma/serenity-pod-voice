@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { generateResponse, textToSpeech } from '../services/openai';
 
 /**
- * Custom hook for handling OpenAI conversation
+ * Custom hook for handling OpenAI conversation with integrated therapeutic approach
  * @returns {Object} Conversation state and handlers
  */
 const useOpenAIConversation = () => {
@@ -10,14 +10,15 @@ const useOpenAIConversation = () => {
   const [aiResponse, setAiResponse] = useState('');
   const [audioUrl, setAudioUrl] = useState(null);
   const [error, setError] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
   
   /**
-   * Process user input and generate AI response
+   * Process user input and generate AI response with therapeutic approach
    * @param {string} userInput - The user's input text
-   * @param {string} mood - The detected mood of the user
+   * @param {Object} emotionData - The detected emotions from facial analysis
    * @returns {Promise<{text: string, audioUrl: string}>} The AI response and audio URL
    */
-  const processInput = async (userInput, mood = 'neutral') => {
+  const processInput = async (userInput, emotionData = {}) => {
     if (!userInput.trim()) {
       return null;
     }
@@ -26,13 +27,33 @@ const useOpenAIConversation = () => {
       setError(null);
       setIsProcessing(true);
       
-      // Generate AI response based on user input and mood
-      const response = await generateResponse(userInput, mood);
+      // Extract simple mood string for backward compatibility
+      const mood = emotionData?.dominant || 'neutral';
+      
+      // Generate AI response based on user input, emotion data, and conversation history
+      const response = await generateResponse(userInput, mood, emotionData, conversationHistory);
       setAiResponse(response);
       
       // Convert AI response to speech
       const speechUrl = await textToSpeech(response);
       setAudioUrl(speechUrl);
+      
+      // Update conversation history
+      const newExchange = { 
+        user: userInput, 
+        assistant: response,
+        timestamp: new Date().toISOString(),
+        emotionData
+      };
+      
+      setConversationHistory(prev => {
+        // Keep only the last 10 exchanges to prevent context length issues
+        const updatedHistory = [...prev, newExchange];
+        if (updatedHistory.length > 10) {
+          return updatedHistory.slice(updatedHistory.length - 10);
+        }
+        return updatedHistory;
+      });
       
       return {
         text: response,
@@ -54,11 +75,20 @@ const useOpenAIConversation = () => {
     setAiResponse('');
     setAudioUrl(null);
     setError(null);
+    setConversationHistory([]);
     
     // Clean up any existing audio URL
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
+  };
+
+  /**
+   * Get the entire conversation history
+   * @returns {Array} The conversation history
+   */
+  const getConversationHistory = () => {
+    return conversationHistory;
   };
   
   return {
@@ -66,8 +96,10 @@ const useOpenAIConversation = () => {
     aiResponse,
     audioUrl,
     error,
+    conversationHistory,
     processInput,
-    resetConversation
+    resetConversation,
+    getConversationHistory
   };
 };
 

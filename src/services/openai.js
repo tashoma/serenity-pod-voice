@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import promptService from './openaiPromptService';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -75,7 +76,7 @@ export const transcribeAudio = async (audioBlob) => {
     
     // Call the OpenAI API with increased timeout and retry logic
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     try {
       console.time('Transcription API call');
@@ -122,74 +123,69 @@ export const transcribeAudio = async (audioBlob) => {
   }
 };
 
-// Generate emotion insights from detailed emotion data
-const generateEmotionInsights = (emotionData) => {
-  if (!emotionData || !emotionData.allEmotions) {
-    return 'neutral';
+// Enhanced emotion processing for the integrated therapeutic model
+const processEmotionalData = (emotionData) => {
+  if (!emotionData || Object.keys(emotionData).length === 0) {
+    return { dominant: 'neutral', intensity: 'low' };
   }
+
+  // Extract and process detailed emotion data
+  const allEmotions = emotionData.allEmotions || {};
   
-  // Get primary and secondary emotions
-  const sortedEmotions = Object.entries(emotionData.allEmotions)
+  // Sort emotions by score
+  const sortedEmotions = Object.entries(allEmotions)
     .sort((a, b) => b[1] - a[1]);
   
-  const primaryEmotion = sortedEmotions[0][0];
-  const primaryScore = sortedEmotions[0][1];
-  const secondaryEmotion = sortedEmotions[1][0];
-  const secondaryScore = sortedEmotions[1][1];
+  // Get the dominant and secondary emotions
+  const dominant = sortedEmotions[0]?.[0] || 'neutral';
+  const dominantScore = sortedEmotions[0]?.[1] || 0;
+  const secondary = sortedEmotions[1]?.[0] || 'neutral';
+  const secondaryScore = sortedEmotions[1]?.[1] || 0;
   
-  // Check for mixed emotions
-  const isAmbivalent = primaryScore < 0.5 || (secondaryScore > 0.3 && secondaryEmotion !== 'neutral');
+  // Determine emotion intensity
+  let intensity = 'moderate';
+  if (dominantScore > 0.7) intensity = 'high';
+  if (dominantScore < 0.4) intensity = 'low';
   
-  // Format insight based on emotion patterns
-  if (isAmbivalent) {
-    return `mixed ${primaryEmotion} and ${secondaryEmotion}`;
-  } else if (primaryScore > 0.7) {
-    return `strong ${primaryEmotion}`;
-  } else {
-    return primaryEmotion;
-  }
+  // Check for emotional ambivalence (mixed feelings)
+  const isAmbivalent = dominantScore < 0.5 || (secondaryScore > 0.3 && secondary !== 'neutral');
+  
+  return {
+    dominant,
+    secondary,
+    intensity,
+    isAmbivalent,
+    dominantScore,
+    secondaryScore
+  };
 };
 
-// Function to generate AI response using GPT
-export const generateResponse = async (userMessage, userMood, emotionData = {}) => {
+// Function to generate AI response using GPT with enhanced therapeutic approach
+export const generateResponse = async (userMessage, userMood, emotionData = {}, conversationHistory = []) => {
   try {
-    // Get deeper emotion insights if available
-    const emotionInsight = generateEmotionInsights(emotionData);
+    // Process emotion data into a format useful for the prompt
+    const processedEmotions = processEmotionalData(emotionData);
     
-    // Create system prompt with mood context and emotional insights
-    const systemPrompt = 
-      `You are a compassionate AI therapy assistant named SerenityPod. The user's current detected mood is ${userMood || 'neutral'}${
-        emotionInsight !== userMood ? ` with ${emotionInsight} undertones` : ''
-      }. 
-      
-      Respond with empathy and understanding to help them process their emotions. 
-      Keep responses concise (2-3 sentences) and conversational.
-      
-      Based on their emotional state, adjust your tone:
-      - For happiness/joy: Be validating and encouraging
-      - For sadness: Be supportive and gentle
-      - For anger: Be calming and acknowledging
-      - For anxiety/fear: Be reassuring and grounding
-      - For neutral: Be attentive and balanced
-      
-      Do not diagnose or provide medical advice, but focus on emotional support, mindfulness, and in-the-moment emotional processing.`;
+    // Use the prompt service to generate optimized chat messages
+    const messages = promptService.generateChatCompletionMessages(
+      userMessage,
+      processedEmotions,
+      conversationHistory
+    );
     
-    // Call OpenAI with retry logic
+    // Call OpenAI with retry logic using the enhanced prompt
     const response = await callOpenAIWithRetry(
       async () => await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        max_tokens: 150,
+        messages: messages,
+        max_tokens: 250, // Increased for more nuanced therapeutic responses
         temperature: 0.7
       })
     );
     
     return response.choices[0].message.content;
   } catch (error) {
-    console.error('Error generating response:', error);
+    console.error('Error generating therapeutic response:', error);
     throw error;
   }
 };
@@ -197,19 +193,24 @@ export const generateResponse = async (userMessage, userMood, emotionData = {}) 
 // Function to convert text response to speech using OpenAI TTS
 export const textToSpeech = async (text) => {
   try {
-    // Choose voice based on text content and tone
+    // Enhanced voice selection based on emotional content
     let voice = 'alloy'; // Default neutral voice
     
-    if (text.includes('?')) {
-      voice = 'nova'; // More questioning, curious tone
-    } else if (text.toLowerCase().includes('sorry') || 
-               text.toLowerCase().includes('understand') ||
-               text.toLowerCase().includes('feel')) {
-      voice = 'shimmer'; // More empathetic tone
-    } else if (text.toLowerCase().includes('try') || 
-               text.toLowerCase().includes('can') ||
-               text.toLowerCase().includes('would')) {
-      voice = 'echo'; // More supportive, coaching tone
+    // Analyze text for emotional content to select appropriate voice
+    const emotionalKeywords = {
+      shimmer: ['compassion', 'understand', 'feel', 'emotion', 'sorry', 'care'],
+      nova: ['curious', 'wonder', 'explore', 'question', 'perhaps', 'consider'],
+      echo: ['action', 'try', 'can', 'would', 'practice', 'technique', 'exercise'],
+      onyx: ['grounding', 'focus', 'attention', 'present', 'notice', 'aware']
+    };
+    
+    // Select voice based on emotional content
+    const textLower = text.toLowerCase();
+    for (const [voiceType, keywords] of Object.entries(emotionalKeywords)) {
+      if (keywords.some(keyword => textLower.includes(keyword))) {
+        voice = voiceType;
+        break;
+      }
     }
     
     // Call OpenAI TTS with retry logic

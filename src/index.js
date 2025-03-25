@@ -4,6 +4,19 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// Add global error handler for unhandled promise rejections
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled Promise Rejection:', event.reason);
+  
+  // Prevent the default browser handling so our error boundary can catch it
+  event.preventDefault();
+  
+  // Log to an error monitoring service in production
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Add your error monitoring service here
+  }
+});
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

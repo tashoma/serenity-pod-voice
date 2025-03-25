@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMicrophone, faMicrophoneSlash, faStop, faUser, faSignOutAlt, faHistory } from '@fortawesome/free-solid-svg-icons';
 import WebcamComponent from '../components/WebcamComponent';
@@ -21,6 +21,7 @@ const Home = () => {
   const [user, setUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [firestoreError, setFirestoreError] = useState(null);
   
   const audioRecorder = useRef(null);
   const audioPlayer = useRef(new Audio());
@@ -118,8 +119,12 @@ const Home = () => {
           
           // Save conversation if user is authenticated
           if (isAuthenticated && user) {
-            saveConversation(user.uid, transcribedText, response, detectedMood)
-              .catch(error => console.error('Error saving conversation:', error));
+            try {
+              await saveConversation(user.uid, transcribedText, response, detectedMood);
+            } catch (error) {
+              console.error('Error saving conversation:', error);
+              setFirestoreError('Unable to save conversation. Your data is still secure.');
+            }
           }
         } catch (error) {
           console.error('Error processing request:', error);
@@ -246,6 +251,19 @@ const Home = () => {
           </div>
         </div>
       </main>
+      
+      {firestoreError && (
+        <div className="error-notification">
+          <p>{firestoreError}</p>
+          <button 
+            className="close-error" 
+            onClick={() => setFirestoreError(null)}
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
       
       <footer className="footer">
         <p>SerenityPod &copy; 2025 - Privacy-focused AI therapy assistant</p>

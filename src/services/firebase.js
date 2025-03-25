@@ -13,7 +13,12 @@ import {
   getDocs,
   where,
   query,
-  orderBy
+  orderBy,
+  enableIndexedDbPersistence,
+  CACHE_SIZE_UNLIMITED,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
 } from 'firebase/firestore';
 
 // Firebase configuration from environment variables
@@ -30,7 +35,13 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// Initialize Firestore with better offline persistence settings
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
 
 // Auth services
 export const loginWithEmail = async (email, password) => {
@@ -72,6 +83,11 @@ export const onAuthChange = (callback) => {
 // Firestore services for conversation history
 export const saveConversation = async (userId, transcript, aiResponse, mood) => {
   try {
+    if (!userId) {
+      console.warn('No user ID provided for saving conversation');
+      return false;
+    }
+    
     const conversationsRef = collection(db, 'conversations');
     const timestamp = new Date();
     
@@ -93,6 +109,11 @@ export const saveConversation = async (userId, transcript, aiResponse, mood) => 
 
 export const getUserConversations = async (userId) => {
   try {
+    if (!userId) {
+      console.warn('No user ID provided for getting conversations');
+      return [];
+    }
+    
     const conversationsRef = collection(db, 'conversations');
     const q = query(
       conversationsRef, 

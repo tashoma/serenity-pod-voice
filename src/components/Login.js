@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { loginWithEmail, registerWithEmail } from '../services/firebase';
+import React, { useState, useEffect } from 'react';
+import { loginWithEmail, registerWithEmail, loginWithGoogle, getGoogleRedirectResult } from '../services/firebase';
 import '../styles/Login.css';
 
 const Login = ({ onLoginSuccess, onClose }) => {
@@ -8,6 +8,23 @@ const Login = ({ onLoginSuccess, onClose }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Check for Google redirect result on component mount
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getGoogleRedirectResult();
+        if (result?.user) {
+          onLoginSuccess(result.user);
+        }
+      } catch (error) {
+        console.error('Error with Google redirect login:', error);
+        setError('Google sign-in failed. Please try again.');
+      }
+    };
+    
+    checkRedirectResult();
+  }, [onLoginSuccess]);
   
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -44,6 +61,37 @@ const Login = ({ onLoginSuccess, onClose }) => {
         setError('Password should be at least 6 characters');
       } else {
         setError(error.message || 'An error occurred during authentication');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Detect if on mobile for better UX
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
+      
+      const result = await loginWithGoogle(isMobile);
+      if (result?.user) {
+        onLoginSuccess(result.user);
+      }
+      // If using redirect (mobile), the result will be handled in the useEffect
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in cancelled. Please try again.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // This is expected when a new popup is opened before the old one is closed
+        console.log('Popup request cancelled, likely due to multiple clicks');
+      } else {
+        setError('Google sign-in failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -102,6 +150,24 @@ const Login = ({ onLoginSuccess, onClose }) => {
             }
           </button>
         </form>
+        
+        <div className="auth-separator">
+          <span>OR</span>
+        </div>
+        
+        <button
+          type="button"
+          className="btn google-signin-button"
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+        >
+          <img 
+            src="/google-icon.svg" 
+            alt="Google logo" 
+            className="google-icon" 
+          />
+          Sign in with Google
+        </button>
         
         <div className="auth-toggle">
           <p>

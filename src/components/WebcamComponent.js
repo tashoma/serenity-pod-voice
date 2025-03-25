@@ -11,6 +11,8 @@ const WebcamComponent = ({ onMoodUpdate }) => {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [noFaceTimeout, setNoFaceTimeout] = useState(null);
+  const [emotionHistory, setEmotionHistory] = useState([]);
+  const [emotionData, setEmotionData] = useState({});
   
   // Load face-api models
   useEffect(() => {
@@ -70,6 +72,20 @@ const WebcamComponent = ({ onMoodUpdate }) => {
     };
   }, [isModelLoaded]);
   
+  // Track emotion history over time to provide better analysis
+  useEffect(() => {
+    const MAX_HISTORY_LENGTH = 20; // Store the last 20 emotion readings
+    
+    if (Object.keys(emotionData).length > 0) {
+      // Add current emotion data to history
+      setEmotionHistory(prevHistory => {
+        const newHistory = [...prevHistory, emotionData];
+        // Keep only the last MAX_HISTORY_LENGTH items
+        return newHistory.slice(-MAX_HISTORY_LENGTH);
+      });
+    }
+  }, [emotionData]);
+  
   // Face detection and mood analysis
   useEffect(() => {
     let detectionInterval;
@@ -112,9 +128,32 @@ const WebcamComponent = ({ onMoodUpdate }) => {
                 expression[1] > max[1] ? expression : max, 
                 ['neutral', 0]
               );
+            
+            // Create a detailed emotion data object
+            const timestamp = new Date();
+            const detailedEmotionData = {
+              timestamp,
+              primaryEmotion: maxExpression[0],
+              primaryEmotionScore: maxExpression[1],
+              // Convert FaceExpressions to a plain object for Firebase compatibility
+              allEmotions: Object.fromEntries(
+                Object.entries(expressions).map(([key, value]) => [key, value])
+              ),
+              faceBoundingBox: {
+                x: detections[0].detection.box.x,
+                y: detections[0].detection.box.y,
+                width: detections[0].detection.box.width,
+                height: detections[0].detection.box.height
+              },
+              faceConfidence: detections[0].detection.score,
+              sessionTime: Date.now() - (emotionHistory[0]?.timestamp || Date.now())
+            };
+            
+            // Store the emotion data
+            setEmotionData(detailedEmotionData);
               
-            // Pass the detected mood to parent component
-            onMoodUpdate(maxExpression[0]);
+            // Pass the detected mood to parent component with full emotion data
+            onMoodUpdate(maxExpression[0], detailedEmotionData);
             
             // Set face detected flag
             setFaceDetected(true);
@@ -143,7 +182,43 @@ const WebcamComponent = ({ onMoodUpdate }) => {
         clearInterval(detectionInterval);
       }
     };
-  }, [isModelLoaded, cameraActive, onMoodUpdate]);
+  }, [isModelLoaded, cameraActive, onMoodUpdate, emotionHistory]);
+  
+  // Get emotion trend analysis
+  const getEmotionTrend = () => {
+    if (emotionHistory.length < 3) return null;
+    
+    // Analyze the trend of the primary emotion over time
+    const emotions = emotionHistory.map(data => data.primaryEmotion);
+    const mostFrequentEmotion = emotions.reduce((acc, emotion) => {
+      acc[emotion] = (acc[emotion] || 0) + 1;
+      return acc;
+    }, {});
+    
+    // Get the most frequent emotion
+    const dominantEmotion = Object.entries(mostFrequentEmotion)
+      .reduce((max, [emotion, count]) => 
+        count > max[1] ? [emotion, count] : max, 
+        ['neutral', 0]
+      )[0];
+    
+    // Calculate average scores for each emotion
+    const averageScores = {};
+    emotionHistory.forEach(data => {
+      Object.entries(data.allEmotions).forEach(([emotion, score]) => {
+        averageScores[emotion] = (averageScores[emotion] || 0) + score / emotionHistory.length;
+      });
+    });
+    
+    return {
+      dominantEmotion,
+      averageScores,
+      emotionCounts: mostFrequentEmotion,
+      sessionDuration: emotionHistory.length > 0 
+        ? Date.now() - (emotionHistory[0].timestamp || Date.now())
+        : 0
+    };
+  };
   
   return (
     <div className="webcam-component">

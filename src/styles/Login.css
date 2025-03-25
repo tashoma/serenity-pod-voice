@@ -114,4 +114,59 @@
   font-size: 0.8rem;
   color: #777;
   text-align: center;
+}
+
+/* Google Sign-In Button */
+.google-signin-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: white;
+  color: #757575;
+  border: 1px solid #ddd;
+  font-family: 'Roboto', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.google-signin-button:hover {
+  background-color: #f8f8f8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.google-signin-button:disabled {
+  background-color: #f5f5f5;
+  color: #aaa;
+  cursor: not-allowed;
+}
+
+.google-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* Separator Between Auth Methods */
+.auth-separator {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  color: #757575;
+  font-size: 12px;
+}
+
+.auth-separator::before,
+.auth-separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #ddd;
+}
+
+.auth-separator span {
+  padding: 0 10px;
 } 

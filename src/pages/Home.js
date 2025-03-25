@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicrophone, faMicrophoneSlash, faStop, faUser, faSignOutAlt, faHistory } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone, faMicrophoneSlash, faStop, faUser, faSignOutAlt, faHistory, faPlus, faRedo } from '@fortawesome/free-solid-svg-icons';
 import WebcamComponent from '../components/WebcamComponent';
 import AvatarComponent from '../components/AvatarComponent';
 import AudioRecorder from '../utils/audioRecorder';
@@ -17,6 +17,7 @@ const Home = () => {
   const [transcript, setTranscript] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [detectedMood, setDetectedMood] = useState('neutral');
+  const [detailedEmotionData, setDetailedEmotionData] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -164,7 +165,7 @@ const Home = () => {
         try {
           // Generate AI response based on transcript and mood
           console.log(`Generating AI response for: "${transcribedText}" with mood: ${detectedMood}`);
-          const response = await generateResponse(transcribedText, detectedMood);
+          const response = await generateResponse(transcribedText, detectedMood, detailedEmotionData);
           setAiResponse(response);
           
           // Convert AI response to speech
@@ -175,7 +176,13 @@ const Home = () => {
           // Save conversation if user is authenticated
           if (isAuthenticated && user) {
             try {
-              const success = await saveConversation(user.uid, transcribedText, response, detectedMood);
+              const success = await saveConversation(
+                user.uid, 
+                transcribedText, 
+                response, 
+                detectedMood, 
+                detailedEmotionData
+              );
               if (!success) {
                 handleFirestoreError(new Error('Failed to save conversation'));
               }
@@ -199,8 +206,28 @@ const Home = () => {
     }
   };
   
-  const handleMoodUpdate = (mood) => {
+  const handleMoodUpdate = (mood, emotionData = {}) => {
     setDetectedMood(mood);
+    
+    try {
+      // Ensure we only store serializable data
+      if (Object.keys(emotionData).length > 0) {
+        // Make a clean copy without any potential circular references
+        const sanitizedData = JSON.parse(JSON.stringify(emotionData, (key, value) => {
+          // Filter out any functions or non-serializable objects
+          return (typeof value === 'function') ? undefined : value;
+        }));
+        
+        setDetailedEmotionData(sanitizedData);
+      }
+    } catch (error) {
+      console.error('Error processing emotion data:', error);
+      // Fall back to basic emotion data
+      setDetailedEmotionData({ 
+        primaryEmotion: mood,
+        timestamp: new Date()
+      });
+    }
   };
   
   const handleLoginClick = () => {
@@ -231,11 +258,41 @@ const Home = () => {
     }
   };
   
+  const handleNewSession = () => {
+    // Clear current conversation state
+    setTranscript('');
+    setAiResponse('');
+    setAudioUrl(null);
+    
+    // Stop any ongoing audio playback
+    if (audioPlayer.current) {
+      audioPlayer.current.pause();
+      audioPlayer.current.src = '';
+    }
+    
+    // Reset any errors
+    setMicError(null);
+    setTranscriptionError(null);
+    
+    // Let the user know a new session has started
+    console.log('Starting new session');
+  };
+  
   const handleFirestoreError = (error) => {
     console.error('Firestore error:', error);
-    setFirestoreError(
-      'Cloud database connection issue. Your conversations are being saved locally instead.'
-    );
+    
+    // Extract helpful message for the user
+    let errorMessage = 'Cloud database connection issue. Your conversations are being saved locally instead.';
+    
+    if (error.message && error.message.includes('custom FaceExpressions object')) {
+      errorMessage = 'Data formatting issue. Your conversation has been saved locally.';
+    } else if (error.message && error.message.includes('timeout')) {
+      errorMessage = 'Cloud database connection timed out. Your conversation has been saved locally.';
+    } else if (!navigator.onLine) {
+      errorMessage = 'You are offline. Your conversation has been saved locally and will sync when you reconnect.';
+    }
+    
+    setFirestoreError(errorMessage);
     
     // Auto-dismiss after 5 seconds
     setTimeout(() => {
@@ -258,6 +315,9 @@ const Home = () => {
         <div className="auth-controls">
           {isAuthenticated ? (
             <div className="user-info">
+              <button className="btn btn-small new-session-btn" onClick={handleNewSession}>
+                <FontAwesomeIcon icon={faPlus} /> New Session
+              </button>
               <button className="btn btn-small history-btn" onClick={handleHistoryClick}>
                 <FontAwesomeIcon icon={faHistory} /> History
               </button>
@@ -267,9 +327,14 @@ const Home = () => {
               </button>
             </div>
           ) : (
-            <button className="btn btn-small" onClick={handleLoginClick}>
-              <FontAwesomeIcon icon={faUser} /> Login
-            </button>
+            <div className="user-info">
+              <button className="btn btn-small new-session-btn" onClick={handleNewSession}>
+                <FontAwesomeIcon icon={faPlus} /> New Session
+              </button>
+              <button className="btn btn-small" onClick={handleLoginClick}>
+                <FontAwesomeIcon icon={faUser} /> Login
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -294,8 +359,19 @@ const Home = () => {
           )}
           
           <div className="transcript-container card">
+            <div className="transcript-header">
+              <h3>Conversation</h3>
+              <button 
+                className="btn btn-small reset-btn" 
+                onClick={handleNewSession}
+                title="Start new session"
+              >
+                <FontAwesomeIcon icon={faRedo} /> Reset
+              </button>
+            </div>
+            
             <div className="transcript-content">
-              <h3>Your message:</h3>
+              <h4>Your message:</h4>
               <p>{transcript}</p>
             </div>
             
@@ -313,7 +389,7 @@ const Home = () => {
             )}
             
             <div className="ai-response">
-              <h3>AI response:</h3>
+              <h4>AI response:</h4>
               {isProcessing ? (
                 <p className="processing">Processing...</p>
               ) : (

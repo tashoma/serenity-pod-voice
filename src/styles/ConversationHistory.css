@@ -93,6 +93,12 @@
 .conversation-item {
   border: 1px solid #eee;
   padding: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.conversation-item:hover {
+  transform: translateY(-2px);
 }
 
 .conversation-header {
@@ -197,4 +203,168 @@
 
 .data-source-indicator p {
   margin: 0;
+}
+
+/* Expanded state for conversation item */
+.conversation-item.expanded {
+  border: 2px solid var(--primary-color, #4a90e2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Emotion data section */
+.emotion-data {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.emotion-data h4 {
+  margin-bottom: 1rem;
+  color: #555;
+  font-size: 1rem;
+}
+
+/* Emotion bars */
+.emotion-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.emotion-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.emotion-label {
+  min-width: 80px;
+  text-transform: capitalize;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.emotion-bar-wrapper {
+  flex: 1;
+  height: 12px;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.emotion-bar {
+  height: 100%;
+  background-color: #aac5e9;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.emotion-bar.primary {
+  background-color: var(--primary-color, #4a90e2);
+}
+
+.emotion-score {
+  font-size: 0.75rem;
+  color: #777;
+  margin-left: 0.5rem;
+}
+
+/* Mood badges for each emotion type */
+.mood-badge.happy,
+.mood-badge.surprised {
+  background-color: #ffd166;
+}
+
+.mood-badge.sad,
+.mood-badge.fearful,
+.mood-badge.disgusted {
+  background-color: #118ab2;
+}
+
+.mood-badge.angry {
+  background-color: #ef476f;
+}
+
+.mood-badge.neutral {
+  background-color: #8c8c8c;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .emotion-bar-container {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  
+  .emotion-label {
+    margin-bottom: 0.25rem;
+  }
+  
+  .emotion-bar-wrapper {
+    width: 100%;
+  }
+}
+
+/* Error message and retry button */
+.error-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  background-color: #ffebee;
+  color: #c62828;
+  border-radius: var(--border-radius);
+  text-align: center;
+}
+
+.retry-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1.5rem;
+  background-color: #e0e0e0;
+  color: #333;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.retry-button:hover {
+  background-color: #d0d0d0;
+  transform: translateY(-1px);
+}
+
+.retry-button:active {
+  transform: translateY(1px);
+}
+
+/* Connection status indicator */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  justify-content: center;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-indicator.online {
+  background-color: #4caf50;
+}
+
+.status-indicator.offline {
+  background-color: #f44336;
+}
+
+.status-indicator.error {
+  background-color: #ff9800;
 } 
